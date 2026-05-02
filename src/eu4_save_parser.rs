@@ -16,9 +16,6 @@ pub enum SaveValue {
     SaveObject(String, Box<SaveValue>),
 }
 
-// skip these tags, because they are not need right now
-// or maybe not, i will implement it fully and then try to leave stuff out, if time is a concern
-
 pub fn parse_savegame(save_path: String) -> Result<Vec<Box<SaveValue>>, SaveGameParsingError> {
 
     // open file and convert to utf8, because savegames are in Windows-1252 Format
