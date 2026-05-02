@@ -1,18 +1,18 @@
 use std::error::Error;
-use image::{GenericImageView, Pixel, ImageBuffer, Rgb, DynamicImage};
+use image::{GenericImageView, Pixel};
 
 /*
- I could add something like, copy def.csv and out.csv in out_dir
+ I could add something like: copy def.csv, wb.csv and out.csv in out_dir
  */
 pub fn create_coord_to_id_csv(bmp_path: String, def_path: String, wb_path: String, out_dir: String) -> Result<(), Box<dyn Error>> {
-    let all_provinces = crate::game_types::read_provinces(def_path.clone(), wb_path.clone()).unwrap();
+    let all_provinces = crate::game_types::read_provinces(def_path.clone(), wb_path.clone())?;
 
-    let pdx_bmp = image::open(bmp_path).unwrap();
+    let pdx_bmp = image::open(bmp_path)?;
     let mut wtr = csv::Writer::from_path(out_dir.to_string() + "/coord_id_map.csv")?;
     wtr.write_record(&["X", "Y", "ID"])?;
 
-    let mut prev_id: u16 = (pdx_bmp.height() + 2).try_into().unwrap();
-    let mut prev_y: u32 = (all_provinces.len() + 2).try_into().unwrap();
+    let mut prev_id: u16 = (pdx_bmp.height() + 2).try_into()?;
+    let mut prev_y: u32 = (all_provinces.len() + 2).try_into()?;
     for (x, y, pixel) in pdx_bmp.pixels() {
         let col = pixel.to_rgb();
 

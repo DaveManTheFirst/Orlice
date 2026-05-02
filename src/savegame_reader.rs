@@ -1,14 +1,12 @@
 use regex::Regex;
-use std::io;
 use std::io::prelude::*;
 use std::fs::File;
-use std::error::Error;
 use crate::game_types::Nation;
 use crate::game_types::Province;
 
 //pub mod game_types;
 
-pub fn read_savegame(save_path: String, tag: String, provsAll: Vec<Province>) -> (Nation, Vec<Province>, Vec<Province>) {
+pub fn read_savegame(save_path: String, tag: String, provs_all: Vec<Province>) -> (Nation, Vec<Province>, Vec<Province>) {
     // insert tag to read
     //let re_prov = Regex::new(r"\ncountries=\{[\S\s]*\n\tBOH=\{[\s]*(?:human=yes)?[\s]*(?:was_player=yes)?[\s]*(?:has_set_government_name=yes)?[\s]*government_rank=(?<gov_rank>\d)[\S\s]*owned_provinces=\{[\s]*(?<provinces>(?:\d*[\s])*)[\s]*}").unwrap();
     let pattern = r"\ncountries=\{[\S\s]*?\n\t".to_string() + &tag + r"=\{[\s]*?(?:human=yes)?[\s]*?(?:pillaged_capital_state=\{[\S\s[^}]]*?})?[\s]*?(?:was_player=yes)?[\s]*(?:has_set_government_name=yes)?[\s]*government_rank=(?<gov_rank>\d)[\S\s]*?map_color=\{[\s]*(?<col>(?:\d*[\s])*)[\s]*}[\S\s]*?owned_provinces=\{[\s]*(?<provinces>(?:\d*[\s])*)[\s]*}";
@@ -33,19 +31,19 @@ pub fn read_savegame(save_path: String, tag: String, provsAll: Vec<Province>) ->
     f.read_to_end(&mut buffer).unwrap();
     let contents = String::from_utf8_lossy(&buffer);
 
-    let Some(caps) = re_prov.captures(&contents) else { return (country, Vec::new(), provsAll) };
+    let Some(caps) = re_prov.captures(&contents) else { return (country, Vec::new(), provs_all) };
 
     let provs = &caps["provinces"].trim();
-    let cols = &caps["col"].trim().split(" ").collect::<Vec<&str>>();;
+    let cols = &caps["col"].trim().split(" ").collect::<Vec<&str>>();
 
     country.color_r = cols[0].parse::<u8>().unwrap();
     country.color_g = cols[1].parse::<u8>().unwrap();
     country.color_b = cols[2].parse::<u8>().unwrap();
 
-    let mut provsVec = Vec::new();
+    let mut provs_vec = Vec::new();
 
     for p in provs.split(" ") {
-        for pa in &provsAll {
+        for pa in &provs_all {
             let pi = p.parse::<u16>().unwrap();
             if pa.id == pi {
                 let pc = Province {
@@ -61,11 +59,11 @@ pub fn read_savegame(save_path: String, tag: String, provsAll: Vec<Province>) ->
                     col: image::Rgb([pa.color_r, pa.color_g, pa.color_b]),
                     owner: Some(country.clone()),
                 };
-                provsVec.push(pc);
+                provs_vec.push(pc);
                 break;
             }
         }
     }
 
-    return (country, provsVec, provsAll)
+    return (country, provs_vec, provs_all)
 }
