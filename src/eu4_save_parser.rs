@@ -39,96 +39,109 @@ pub fn parse_savegame(save_path: String) -> Result<Vec<Box<SaveValue>>, SaveGame
     let mut res: Vec<Box<SaveValue>> = Vec::new();
 
     let mut i = 0;
+    let mut d = 0;
     while i < contents.len() {
-        let (s, i_new) = parse_recursive(&contents, i)?;
+        let (s, i_new, d_r) = parse_recursive(&contents, i, 0)?;
+
+        if d_r > d {
+            d = d_r;
+        }
+
         i = i_new;
         res.push(s);
     }
+    println!("MAX DEPTH: {}", d);
     /*let mut i = 0;
     let mut c = 0;
+    let mut d = 0;
     while c < 2 {
-        let (s, i_new) = parse_recursive(&contents, i)?;
+        let (s, i_new, d_r) = parse_recursive(&contents, i, 0)?;
+
+        if d_r > d {
+            d = d_r;
+        }
+
         i = i_new;
         c += 1;
         res.push(s);
-    }*/
+    }
+    println!("MAX DEPTH: {}", d);*/
 
     Ok(res)
 }
 
-pub fn parse_recursive(remain: &Vec<char>, start_index: usize) -> Result<(Box<SaveValue>, usize), SaveGameParsingError> {
-    if start_index >= remain.len() {
-        return Ok((Box::new(SaveValue::SaveNull), start_index));
-    }
-    let index = skip_whitespace(&remain, start_index)?;
+pub fn parse_recursive(remain: &Vec<char>, mut index: usize, mut d: usize) -> Result<(Box<SaveValue>, usize, usize), SaveGameParsingError> { // 8Byte + 8Byte
     if index >= remain.len() {
-        return Ok((Box::new(SaveValue::SaveNull), index));
+        return Ok((Box::new(SaveValue::SaveNull), index, d));
+    }
+    index = skip_whitespace(&remain, index)?;                           // 24 Byte
+    if index >= remain.len() {
+        return Ok((Box::new(SaveValue::SaveNull), index, d));
     }
 
-    let c = remain[index];
-    if c == '{' {
+    if remain[index] == '{' {
         // SaveArray -> Recursion
-        return Ok(parse_array(&remain, index + 1)?);
+        return Ok(parse_array(&remain, index + 1, d)?);                    // 24 Byte
     }
-    else if c == '\n' {
-        return Ok((Box::new(SaveValue::SaveNull), index + 1));
+    else if remain[index] == '\n' {
+        return Ok((Box::new(SaveValue::SaveNull), index + 1, d));
     }
-    else if c == '"' {
+    else if remain[index] == '"' {
         // string
-        let mut i = index + 1;
+        index += 1;
         let mut val = String::new();
-        while i < remain.len() && remain[i] != '"'  {
-            val.push(remain[i]);
-            i += 1;
+        while index < remain.len() && remain[index] != '"'  {
+            val.push(remain[index]);
+            index += 1;
         }
 
-        if remain[i] == '\0' {
-            return Ok((Box::new(SaveValue::SaveString(val)), i + 1));
+        if remain[index] == '\0' {
+            return Ok((Box::new(SaveValue::SaveString(val)), index + 1, d));
         }
 
-        if remain[i] == '=' {
-            let (sv, index_r) = parse_recursive(&remain, i + 1)?;
-            return Ok((Box::new(SaveValue::SaveObject(val, sv)), index_r));
+        // this is also a Object
+        if remain[index] == '=' {
+            let (sv, index_r, d_n) = parse_recursive(&remain, index + 1, d)?;
+            return Ok((Box::new(SaveValue::SaveObject(val, sv)), index_r, d_n));
         }
 
-        return Ok((Box::new(SaveValue::SaveString(val)), i + 1));
+        return Ok((Box::new(SaveValue::SaveString(val)), index + 1, d));
     }
-    else if c.is_ascii_digit() {
+    else if remain[index].is_ascii_digit() || remain[index] == '-' {
         // int
-        let mut i = index + 1;
-        let mut val = String::new();
-        let mut is_obj = false;
-        let mut count_dot = 0;
-        while remain[i] != '\n' {
+        let mut val = String::new();                                        // 24 Bytes
+        let mut is_obj = false;                                             // 1 Byte
+        let mut count_dot : u8 = 0;                                         // 1 Byte
+        while remain[index] != '\n' && remain[index] != ' ' && remain[index] != '\t' {
 
-            if remain[i] == '=' {
+            if remain[index] == '=' {
                 is_obj = true;
-                i += 1;
+                index += 1;
                 break;
             }
 
-            if remain[i] == '.' {
+            if remain[index] == '.' {
                 count_dot += 1;
             }
 
-            val.push(remain[i]);
-            i += 1;
+            val.push(remain[index]);
+            index += 1;
         }
 
-        let mut ret: (Box<SaveValue>, usize);
+        let mut ret: (Box<SaveValue>, usize, usize);                           // 8Byte + 8Byte
 
         if is_obj {
-            let (sv, index_r) = parse_recursive(&remain, i)?;
-            return Ok((Box::new(SaveValue::SaveObject(val, sv)), index_r));
+            let (sv, index_r, d_n) = parse_recursive(&remain, index, d)?;      //  24 Byte + 8 Byte + 8 Byte
+            return Ok((Box::new(SaveValue::SaveObject(val, sv)), index_r, d_n));
         }
 
         if count_dot == 1 {
-            let r = match val.parse::<f32>() {
+            let r = match val.parse::<f32>() {                          // 24 Byte + 8 Byte
                 Ok(l) => l,
                 Err(r) => 999.999,
             };
 
-            ret = (Box::new(SaveValue::SaveFloat(r)), i + 1);
+            ret = (Box::new(SaveValue::SaveFloat(r)), index + 1, d);
         }
         else if count_dot == 0 {
             let r = match val.parse::<i32>() {
@@ -136,90 +149,118 @@ pub fn parse_recursive(remain: &Vec<char>, start_index: usize) -> Result<(Box<Sa
                 Err(r) => 999,
             };
 
-            ret = (Box::new(SaveValue::SaveNumber(r)), i + 1);
+            ret = (Box::new(SaveValue::SaveNumber(r)), index + 1, d);
         }
         else {
-            ret = (Box::new(SaveValue::SaveDate(val)), i + 1);
+            ret = (Box::new(SaveValue::SaveDate(val)), index + 1, d);
         }
 
 
         return Ok(ret);
     }
-    else if c == '\0' { /*or eof*/
+    else if remain[index] == '\0' { /*or eof*/
         return Err(SaveGameParsingError::FileParsing(format!("Unexpected EOF at index: {}!", index)));
     }
     else { // it should be TAG=, else it is some error
-        let mut i = index;
         let mut val = String::new();
-        while remain[i] != '=' {
+        while remain[index] != '=' {
 
-            if c == '\n' || c == ' ' {
-                return Err(SaveGameParsingError::FileParsing(format!("Unknown token at index: {}!", index)));
+            // this wierd map_area{
+            if remain[index] == '{' {
+                let (sv, index_r, d_n) = parse_recursive(&remain, index, d)?;
+                return Ok((Box::new(SaveValue::SaveObject(val, sv)), index_r, d_n));
             }
 
-            if val == "yes" {
-                return Ok((Box::new(SaveValue::SaveBool(true)), index + 4));
+            // can also be a string without ""
+            if remain[index] == ' ' || remain[index] == '\t' || remain[index] == '\n' {
+                if val == "yes" {
+                    return Ok((Box::new(SaveValue::SaveBool(true)), index + 1, d));
+                }
+
+                if val == "no" {
+                    return Ok((Box::new(SaveValue::SaveBool(false)), index + 1, d));
+                }
+
+                return Ok((Box::new(SaveValue::SaveString(val)), index + 1, d));
             }
 
-            if val == "no" {
-                return Ok((Box::new(SaveValue::SaveBool(false)), index + 3));
-            }
+            val.push(remain[index]);
 
-            val.push(remain[i]);
-            i += 1;
+            index += 1;
         }
-        let (sv, index_r) = parse_recursive(&remain, i + 1)?;
-        return Ok((Box::new(SaveValue::SaveObject(val, sv)), index_r));
+        let (sv, index_r, d_n) = parse_recursive(&remain, index + 1, d)?;
+
+        if d_n == 17 {
+            match *sv {
+                SaveValue::SaveNull => { panic!("DDDD {} -> NULL", val); }
+                SaveValue::SaveBool(b) => { panic!("DDDD {} -> {b:?}", val); }
+                SaveValue::SaveNumber(b) => { panic!("DDDD {} -> {b:?}", val); }
+                SaveValue::SaveFloat(b) => { panic!("DDDD {} -> {b:?}", val); }
+                SaveValue::SaveDate(b) => { panic!("DDDD {} -> {b:?}", val); }
+                SaveValue::SaveString(b)  => { panic!("DDDD {} -> {b:?}", val); }
+                SaveValue::SaveArray(v) => { panic!("DDDD {} -> ARRAY", val); }
+                SaveValue::SaveObject(s, b) => { panic!("DDDD {} -> OBJECT", val); }
+            }
+        }
+
+        return Ok((Box::new(SaveValue::SaveObject(val, sv)), index_r, d_n));
     }
 }
 
 // parse an array to see what it contains
-pub fn parse_array(remain: &Vec<char>, index: usize) -> Result<(Box<SaveValue>, usize), SaveGameParsingError> {
-    let mut c = remain[index];
-    let mut i = index;
-
+pub fn parse_array(remain: &Vec<char>, mut index: usize, d: usize) -> Result<(Box<SaveValue>, usize, usize), SaveGameParsingError> {
     // we have to find seperate little objects
 
     let mut ret : Vec<Box<SaveValue>> = Vec::new();
+    let mut d_r = d;
+
+    // skip whitespaces incase of empty array
+    index = skip_whitespace(&remain, index)?;
+    let mut c = remain[index];
+
     while c != '}' {
+        // initally there was a skip whitespace here, which "belongs here"
+        // but it is also done py parse recursive, so no need
+        let (s, i_new, d_n) = parse_recursive(&remain, index, d + 1)?;
 
-        i = skip_whitespace(&remain, i)?;
+        if d_n > d_r {
+            d_r = d_n;
+        }
 
-        let (s, i_new) = parse_recursive(&remain, i)?;
-        i = i_new;
+        index = i_new;
         ret.push(s);
 
-        if i >= remain.len() {
+        if index >= remain.len() {
             break;
         }
 
-        c = remain[i];
+        index = skip_whitespace(&remain, index)?;
+        c = remain[index];
     }
 
     // reasonable to skip to next line i think
-    i = skip_whitespace(&remain, i)?;
+    index = skip_whitespace(&remain, index)?;
 
-    Ok((Box::new(SaveValue::SaveArray(ret)), i + 1))
+    Ok((Box::new(SaveValue::SaveArray(ret)), index + 1, d_r))
 }
 
-pub fn skip_whitespace(remain: &Vec<char>, index: usize) -> Result<usize, SaveGameParsingError> {
+pub fn skip_whitespace(remain: &Vec<char>, mut index: usize) -> Result<usize, SaveGameParsingError> {
     if index >= remain.len() {
         return Ok(index);
     }
 
     let mut c = remain[index];
-    let mut i = index;
     while c == ' ' || c == '\t' || c == '\n' {
-        i += 1;
+        index += 1;
 
-        if i >= remain.len() {
+        if index >= remain.len() {
             break;
         }
 
-        c = remain[i];
+        c = remain[index];
     }
 
-    Ok(i)
+    Ok(index)
 }
 
 /*

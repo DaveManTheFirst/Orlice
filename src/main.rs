@@ -76,6 +76,7 @@ fn print_arr(arr: &Vec<Box<SaveValue>>, tabs: u32) {
     for s in arr.iter() {
         print_sv(&s, 0);
     }
+    println!("ARRAY ENDE!");
 }
 
 fn print_with_tab(s: &str, t: u32)
