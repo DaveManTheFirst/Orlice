@@ -20,43 +20,35 @@ fn main() {
     let save_path = String::from("/mnt/MassenData/Programmieren/Rust/Orlice/resources/savegame/gamestate");
     let map_path = String::from("/mnt/MassenData/Programmieren/Rust/Orlice/resources/generation/coord_id_map.csv");
 
-    parse_and_print_savegame(save_path);
+    let sv = match crate::eu4_save_parser::parse_savegame(save_path) {
+            Ok(r) => r,
+            Err(error) => panic!("Problem parsing save game: {error:?}"),
+    };
     println!("Parse Save: {}", st.elapsed().as_micros());
-    /*
-    let all_provinces_result = crate::game_types::read_provinces(def_path.clone(), wb_path.clone());
-
-    println!("Read Provinces: {}", st.elapsed().as_micros());
     st = Instant::now();
-    let all_provinces = match all_provinces_result {
+
+    let mut all_provinces = match crate::game_types::read_provinces(def_path.clone(), wb_path.clone()) {
         Ok(pv) => pv,
         Err(error) => panic!("Problem opening the definition or wb file: {error:?}"),
     };
-
-    let (c_boh, mut boh_provinces, all_provinces) = savegame_reader::read_savegame(save_path.clone(), String::from("BOH"), all_provinces);
-    let (_c_ita, mut ita_provinces, all_provinces) = savegame_reader::read_savegame(save_path.clone(), String::from("ITA"), all_provinces);
-    let (_c_egy, mut egy_provinces, all_provinces) = savegame_reader::read_savegame(save_path.clone(), String::from("EGY"), all_provinces);
-
-    println!("Read savegame: {}", st.elapsed().as_micros());
+    println!("Read Provinces: {}", st.elapsed().as_micros());
     st = Instant::now();
-    let mut country_provinces = Vec::new();
 
-    country_provinces.append(&mut boh_provinces);
-    country_provinces.append(&mut ita_provinces);
-    country_provinces.append(&mut egy_provinces);
+    let nations = match crate::game_types::from_savevalues(&sv, &mut all_provinces) {
+        Ok(n) => n,
+        Err(error) => panic!("Problem getting game objects from save values: {error:?}"),
+    };
+    println!("Read & Assign Countries: {}", st.elapsed().as_micros());
+    st = Instant::now();
+
+    let mut country_tags = vec![String::from("BOH"), String::from("ITA"), String::from("EGY"), String::from("SCA"), String::from("GBR")];
+
+    println!("Assign Countries: {}", st.elapsed().as_micros());
+    st = Instant::now();
+
     //crate::map_converter::create_coord_to_id_csv(bmp_path.clone(), def_path.clone(), wb_path.clone(), out_path.clone());
-    let out = c_boh.get_title();
-    println!("Title: {}, P1: {}, P2: {}", out, country_provinces[2].name, all_provinces[1265].name);
-    let _ = make_image(all_provinces, country_provinces, map_path.clone(), bmp_path.clone());
-    println!("Make Image: {}", st.elapsed().as_micros());*/
-}
-
-fn parse_and_print_savegame(path: String) {
-
-    let sv = crate::eu4_save_parser::parse_savegame(path).unwrap();
-
-    for s in sv.iter() {
-        print_sv(&s, 0);
-    }
+    let _ = make_image(all_provinces, country_tags, map_path.clone(), bmp_path.clone());
+    println!("Make Image: {}", st.elapsed().as_micros());
 }
 
 fn print_sv(sv: &SaveValue, tabs: u32) {
@@ -103,7 +95,7 @@ fn print_with_tab_no_lb(s: &str, t: u32)
     print!("{}", out);
 }
 
-fn make_image(all_provinces: Vec<Province>, country_provinces: Vec<Province>, map_path: String, bmp_path: String) -> Result<(), Box<dyn Error>> {
+fn make_image(all_provinces: Vec<Province>, country_tags: Vec<String>, map_path: String, bmp_path: String) -> Result<(), Box<dyn Error>> {
     let pdx_bmp = image::open(bmp_path).unwrap();
 
     let rdr = csv::ReaderBuilder::new()
@@ -143,29 +135,28 @@ fn make_image(all_provinces: Vec<Province>, country_provinces: Vec<Province>, ma
         }
 
         let mut px_col = col_gray;
-        let mut prov_of_country = false;
-        for p in &country_provinces {
-            if i32::from(p.id) == prev_id {
-                px_col = image::Rgb([p.owner.as_ref().unwrap().color_r, p.owner.as_ref().unwrap().color_g, p.owner.as_ref().unwrap().color_b]);
-                prov_of_country = true;
-                break;
-            }
-        }
 
-        if !prov_of_country {
-            for p in &all_provinces {
-                if i32::from(p.id) == prev_id {
-                    if p.is_used == false {
-                        // idk what provinces are unused or not x
-                        px_col = col_gray;
+        for p in &all_provinces {
+            if i32::from(p.id) == prev_id {
+                let is_country : bool = match p.owner.as_ref() {
+                    Some(_) => true,
+                    None => false,
+                };
+                if is_country {
+                    if country_tags.contains(&p.owner.as_ref().unwrap().tag) {
+                        px_col = image::Rgb([p.owner.as_ref().unwrap().color_r, p.owner.as_ref().unwrap().color_g, p.owner.as_ref().unwrap().color_b]);
                     }
-                    else if p.is_lake || p.is_sea {
-                        px_col = col_sea;
-                    } else {
-                        px_col = col_gray;
-                    }
-                    break;
                 }
+                else if p.is_used == false {
+                    // idk what provinces are unused or not x
+                    px_col = col_gray;
+                }
+                else if p.is_lake || p.is_sea {
+                    px_col = col_sea;
+                } else {
+                    px_col = col_gray;
+                }
+                break;
             }
         }
 
@@ -184,7 +175,16 @@ fn make_image(all_provinces: Vec<Province>, country_provinces: Vec<Province>, ma
         for p in &all_provinces {
             if i32::from(p.id) == prev_id {
                 let p_buf = imgbuf.get_pixel_mut(i.try_into().unwrap(), img_y-1);
-                if p.is_used == false {
+                let is_country : bool = match p.owner.as_ref() {
+                    Some(_) => true,
+                    None => false,
+                };
+                if is_country {
+                    let own = p.owner.as_ref().unwrap();
+                    if country_tags.contains(&own.tag) {
+                        *p_buf = image::Rgb([own.color_r, own.color_g, own.color_b]);
+                    }
+                } else if p.is_used == false {
                     *p_buf = col_gray;
                 }
                 else if p.is_lake || p.is_sea {
@@ -192,13 +192,6 @@ fn make_image(all_provinces: Vec<Province>, country_provinces: Vec<Province>, ma
                 } else {
                     *p_buf = col_gray;
                 }
-                break;
-            }
-        }
-        for p in &country_provinces {
-            if i32::from(p.id) == prev_id {
-                let p_buf = imgbuf.get_pixel_mut(i.try_into().unwrap(), img_y-1);
-                *p_buf = image::Rgb([p.owner.as_ref().unwrap().color_r, p.owner.as_ref().unwrap().color_g, p.owner.as_ref().unwrap().color_b]);
                 break;
             }
         }
@@ -212,7 +205,7 @@ fn make_image(all_provinces: Vec<Province>, country_provinces: Vec<Province>, ma
     //img_dyn = img_dyn.resize(img_x * 2, img_y * 2, image::imageops::FilterType::Lanczos3);
     //let kernel: [f32; 9] = [1.0; 9];
     //img_dyn = img_dyn.filter3x3(&kernel);
-    img_dyn.save("/mnt/MassenData/Programmieren/Rust/Orlice/test.png")?;
+    img_dyn.save("/mnt/MassenData/Programmieren/Rust/Orlice/misc/test.png")?;
 
     Ok(())
 }

@@ -3,6 +3,8 @@ use encoding_rs::WINDOWS_1252; // ISO 8859-1
 use encoding_rs_io::DecodeReaderBytesBuilder;
 use image::Rgb;
 
+use crate::eu4_save_parser::SaveValue;
+
 #[derive(Clone)]
 pub struct Nation
 {
@@ -15,6 +17,8 @@ pub struct Nation
     pub rank: u8, // Enum: Duchy, Kingom, Empire
     pub gov_type: String, // Empire, Kralvsti, Most Serene Republic, etc.
     pub religion: String,
+    pub allies: Vec<String>,
+    pub subjects: Vec<String,
 }
 
 pub struct Province
@@ -94,4 +98,135 @@ pub fn read_provinces(def_path: String, wb_path: String) -> Result<Vec<Province>
         }
     }
     Ok(pv)
+}
+
+pub fn from_savevalues(sv: &Vec<Box<SaveValue>>, pv: &mut Vec<Province>) -> Result<Vec<Nation>, Box<dyn Error>> {
+
+    let mut countries : Vec<Nation> = Vec::new();
+
+    for sa in sv {
+        match sa.as_ref() {
+            SaveValue::SaveObject(v, u) => {
+                if *v == String::from("countries") {
+                    match u.as_ref() {
+                        SaveValue::SaveArray(a) => {
+                            for ca in a {
+                                match ca.as_ref() {
+                                    SaveValue::SaveObject(ta, inf) => {
+                                        match inf.as_ref() {
+                                            SaveValue::SaveArray(info_arr) => {
+                                                let mut c = Nation {
+                                                    id: 1,
+                                                    name: ta.clone(),
+                                                    tag: ta.clone(),
+                                                    color_r: 0,
+                                                    color_g: 0,
+                                                    color_b: 0,
+                                                    rank: 1, // Enum: Duchy, Kingom, Empire
+                                                    gov_type: String::from("Království"), // Empire, Kralvsti, Most Serene Republic, etc.
+                                                    religion: String::from("Hussite"),
+                                                    allies: Vec::new(),
+                                                    subjects: Vec::new(),
+                                                };
+
+                                                for info_o in info_arr {
+                                                    match info_o.as_ref() {
+                                                        SaveValue::SaveObject(name, val) => {
+                                                            if *name == String::from("government_name") {
+                                                                match val.as_ref() {
+                                                                    SaveValue::SaveString(s) => { c.gov_type = s.clone(); },
+                                                                    _ => continue,
+                                                                }
+                                                            } else if *name == String::from("government_rank") {
+                                                                match val.as_ref() {
+                                                                    SaveValue::SaveString(s) => { c.gov_type = s.clone(); },
+                                                                    _ => continue,
+                                                                }
+                                                            } else if *name == String::from("religion") {
+                                                                match val.as_ref() {
+                                                                    SaveValue::SaveString(s) => { c.religion= s.clone(); },
+                                                                    _ => continue,
+                                                                }
+                                                            } else if *name == String::from("colors") {
+                                                                match val.as_ref() {
+                                                                    SaveValue::SaveArray(s) => {
+                                                                        for colcat in s {
+                                                                            match colcat.as_ref() {
+                                                                                SaveValue::SaveObject(ccname, carr) => {
+                                                                                    if *ccname == String::from("map_color") {
+                                                                                        match carr.as_ref() {
+                                                                                            SaveValue::SaveArray(cols) => {
+                                                                                                let mut cnt = 0;
+                                                                                                for colval in cols {
+                                                                                                    //println!("{}", c.tag);
+                                                                                                    match colval.as_ref() {
+                                                                                                        SaveValue::SaveNumber(colnum) => {
+                                                                                                            if cnt == 0 {
+                                                                                                                c.color_r = *colnum as u8;
+                                                                                                            } else if cnt == 1 {
+                                                                                                                c.color_g = *colnum as u8;
+                                                                                                            } else {
+                                                                                                                c.color_b = *colnum as u8;
+                                                                                                            }
+                                                                                                            cnt += 1;
+                                                                                                        },
+                                                                                                        _ => continue,
+                                                                                                    }
+                                                                                                }
+                                                                                            },
+                                                                                            _ => continue,
+                                                                                        }
+                                                                                    }
+                                                                                },
+                                                                                _ => continue,
+                                                                            }
+                                                                        }
+                                                                    },
+                                                                    _ => continue,
+                                                                }
+                                                            } else if *name == String::from("owned_provinces") {
+                                                                match val.as_ref() {
+                                                                    SaveValue::SaveArray(opa) => {
+                                                                        for opp in opa {
+                                                                            match opp.as_ref() {
+                                                                                SaveValue::SaveNumber(opn) => {
+                                                                                    for prov in &mut *pv {
+                                                                                        if prov.id == (*opn as u16) {
+                                                                                            prov.owner = Some(c.clone());
+                                                                                        }
+                                                                                    }
+                                                                                },
+                                                                                _ => continue,
+                                                                            }
+                                                                        }
+                                                                    },
+                                                                    _ => continue,
+                                                                }
+                                                            }
+                                                            else {
+                                                                continue;
+                                                            }
+                                                        },
+                                                        _ => continue,
+                                                    }
+                                                }
+
+                                                countries.push(c);
+                                            },
+                                            _ => continue,
+                                        }
+                                    },
+                                    _ => continue,
+                                }
+                            }
+                        },
+                        _ => continue,
+                    }
+                }
+            },
+            _ => continue,
+        }
+    }
+
+    Ok(countries)
 }
