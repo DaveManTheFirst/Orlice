@@ -1,4 +1,5 @@
 use crate::game_types::Province;
+use crate::game_types::Nation;
 use crate::eu4_save_parser::SaveValue;
 
 use std::time::Instant;
@@ -11,6 +12,15 @@ pub mod savegame_reader;
 pub mod map_converter;
 pub mod eu4_save_parser;
 
+struct OutputOptions {
+    show_subjects: bool,
+    blend_subjects: bool,
+    show_allies: bool,
+    blend_allies: bool,
+    blend_factor: f32,
+    dest_path: String,
+}
+
 fn main() {
     let mut st = Instant::now();
     let def_path = String::from("/mnt/MassenData/Programmieren/Rust/Orlice/resources/map/definition.csv");
@@ -19,6 +29,7 @@ fn main() {
     let bmp_path = String::from("/mnt/MassenData/Programmieren/Rust/Orlice/resources/map/provinces.bmp");
     let save_path = String::from("/mnt/MassenData/Programmieren/Rust/Orlice/resources/savegame/gamestate");
     let map_path = String::from("/mnt/MassenData/Programmieren/Rust/Orlice/resources/generation/coord_id_map.csv");
+    let dest_path = String::from("/mnt/MassenData/Programmieren/Rust/Orlice/misc/test.png");
 
     let sv = match crate::eu4_save_parser::parse_savegame(save_path) {
             Ok(r) => r,
@@ -34,20 +45,29 @@ fn main() {
     println!("Read Provinces: {}", st.elapsed().as_micros());
     st = Instant::now();
 
-    let nations = match crate::game_types::from_savevalues(&sv, &mut all_provinces) {
+    let nations : Vec<Nation> = match crate::game_types::from_savevalues(&sv, &mut all_provinces) {
         Ok(n) => n,
         Err(error) => panic!("Problem getting game objects from save values: {error:?}"),
     };
     println!("Read & Assign Countries: {}", st.elapsed().as_micros());
     st = Instant::now();
 
-    let mut country_tags = vec![String::from("BOH"), String::from("ITA"), String::from("EGY"), String::from("SCA"), String::from("GBR")];
+    let mut country_tags = vec![String::from("EGY")]; /*, String::from("ITA"), String::from("EGY"), String::from("SCA"), String::from("GBR")]; */
 
     println!("Assign Countries: {}", st.elapsed().as_micros());
     st = Instant::now();
 
+    let opts = OutputOptions {
+        show_subjects: false,
+        blend_subjects: false,
+        show_allies: true,
+        blend_allies: true,
+        blend_factor: 0.25,
+        dest_path: dest_path.clone(),
+    };
+
     //crate::map_converter::create_coord_to_id_csv(bmp_path.clone(), def_path.clone(), wb_path.clone(), out_path.clone());
-    let _ = make_image(all_provinces, country_tags, map_path.clone(), bmp_path.clone());
+    let _ = make_image(&all_provinces, country_tags, &nations, opts, map_path.clone(), bmp_path.clone());
     println!("Make Image: {}", st.elapsed().as_micros());
 }
 
@@ -95,7 +115,7 @@ fn print_with_tab_no_lb(s: &str, t: u32)
     print!("{}", out);
 }
 
-fn make_image(all_provinces: Vec<Province>, country_tags: Vec<String>, map_path: String, bmp_path: String) -> Result<(), Box<dyn Error>> {
+fn make_image(all_provinces: &Vec<Province>, country_tags: Vec<String>, countries: &Vec<Nation>, opt: OutputOptions, map_path: String, bmp_path: String) -> Result<(), Box<dyn Error>> {
     let pdx_bmp = image::open(bmp_path).unwrap();
 
     let rdr = csv::ReaderBuilder::new()
@@ -108,6 +128,35 @@ fn make_image(all_provinces: Vec<Province>, country_tags: Vec<String>, map_path:
     let img_x = pdx_bmp.width();
     let img_y = pdx_bmp.height();
     let mut imgbuf: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::new(img_x, img_y);
+
+    // build a country_tags to include allies and show_subjects
+    let mut country_tags_all : Vec<String> = Vec::new();
+    for n in countries {
+        if country_tags.contains(&n.tag) {
+            if opt.show_allies {
+                for ally in &n.allies {
+                    if !country_tags_all.contains(&ally) {
+                        country_tags_all.push(ally.clone());
+                    }
+                }
+            }
+            if opt.show_subjects {
+                for sub in &n.subjects {
+                    if !country_tags_all.contains(&sub) {
+                        country_tags_all.push(sub.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    // add original guys
+    for country_original in &country_tags {
+        if !country_tags_all.contains(country_original) {
+            country_tags_all.push(country_original.clone());
+        }
+    }
+
 
     let st = Instant::now();
     let mut cnt = 0;
@@ -136,15 +185,83 @@ fn make_image(all_provinces: Vec<Province>, country_tags: Vec<String>, map_path:
 
         let mut px_col = col_gray;
 
-        for p in &all_provinces {
+        for p in all_provinces {
             if i32::from(p.id) == prev_id {
                 let is_country : bool = match p.owner.as_ref() {
                     Some(_) => true,
                     None => false,
                 };
                 if is_country {
-                    if country_tags.contains(&p.owner.as_ref().unwrap().tag) {
-                        px_col = image::Rgb([p.owner.as_ref().unwrap().color_r, p.owner.as_ref().unwrap().color_g, p.owner.as_ref().unwrap().color_b]);
+                    let owner = p.owner.as_ref().unwrap();
+                    if country_tags_all.contains(&owner.tag) {
+                        if country_tags.contains(&owner.tag) {
+                            px_col = image::Rgb([owner.color_r, owner.color_g, owner.color_b]);
+                        }
+                        else {
+                            let mut col_owner_r = 0;
+                            let mut col_owner_g = 0;
+                            let mut col_owner_b = 0;
+                            let mut col_other_r = 0;
+                            let mut col_other_g = 0;
+                            let mut col_other_b = 0;
+                            let mut is_ally = false;
+                            let mut is_subject = false;
+                            // gotta be ally or subject
+                            for n in countries {
+                                if n.tag == owner.tag {
+                                    col_other_r = owner.color_r;
+                                    col_other_g = owner.color_g;
+                                    col_other_b = owner.color_b;
+                                }
+                                if !country_tags.contains(&n.tag) {
+                                    continue;
+                                }
+                                if opt.show_allies && !is_ally {
+                                    for ally in &n.allies {
+                                        if ally == &owner.tag {
+                                            is_ally = true;
+                                            col_owner_r = n.color_r;
+                                            col_owner_g = n.color_g;
+                                            col_owner_b = n.color_b;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if opt.show_subjects && !is_subject {
+                                    for sub in &n.subjects {
+                                        if sub == &owner.tag {
+                                            is_subject = true;
+                                            col_owner_r = n.color_r;
+                                            col_owner_g = n.color_g;
+                                            col_owner_b = n.color_b;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            if is_ally {
+                                if opt.blend_allies {
+                                    let red = blend_colors(col_owner_r, col_other_r, opt.blend_factor);
+                                    let green = blend_colors(col_owner_g, col_other_g, opt.blend_factor);
+                                    let blue = blend_colors(col_owner_b, col_other_b, opt.blend_factor);
+                                    px_col = image::Rgb([red, green, blue]);
+                                }
+                                else {
+                                    px_col = image::Rgb([col_other_r, col_other_g, col_other_b]);
+                                }
+                            }
+                            if is_subject {
+                                if opt.blend_subjects {
+                                    let red = blend_colors(col_owner_r, col_other_r, opt.blend_factor);
+                                    let green = blend_colors(col_owner_g, col_other_g, opt.blend_factor);
+                                    let blue = blend_colors(col_owner_b, col_other_b, opt.blend_factor);
+                                    px_col = image::Rgb([red, green, blue]);
+                                }
+                                else {
+                                    px_col = image::Rgb([col_other_r, col_other_g, col_other_b]);
+                                }
+                            }
+                        }
                     }
                 }
                 else if p.is_used == false {
@@ -172,7 +289,7 @@ fn make_image(all_provinces: Vec<Province>, country_tags: Vec<String>, map_path:
     }
 
     for i in prev_x..img_x{
-        for p in &all_provinces {
+        for p in all_provinces {
             if i32::from(p.id) == prev_id {
                 let p_buf = imgbuf.get_pixel_mut(i.try_into().unwrap(), img_y-1);
                 let is_country : bool = match p.owner.as_ref() {
@@ -205,8 +322,25 @@ fn make_image(all_provinces: Vec<Province>, country_tags: Vec<String>, map_path:
     //img_dyn = img_dyn.resize(img_x * 2, img_y * 2, image::imageops::FilterType::Lanczos3);
     //let kernel: [f32; 9] = [1.0; 9];
     //img_dyn = img_dyn.filter3x3(&kernel);
-    img_dyn.save("/mnt/MassenData/Programmieren/Rust/Orlice/misc/test.png")?;
+    img_dyn.save(opt.dest_path)?;
 
     Ok(())
+}
+
+fn blend_colors(original: u8, sub: u8, factor: f32) -> u8 {
+    let mut ret = original;
+    let fraction = (sub as f32 * factor) as u8;
+    if original >= fraction {
+        ret -= fraction;
+    }
+    else {
+        if 255 - fraction < ret {
+            ret = 255;
+        }
+        else {
+            ret += fraction;
+        }
+    }
+    ret as u8
 }
 

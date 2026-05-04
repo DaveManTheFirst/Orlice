@@ -18,7 +18,7 @@ pub struct Nation
     pub gov_type: String, // Empire, Kralvsti, Most Serene Republic, etc.
     pub religion: String,
     pub allies: Vec<String>,
-    pub subjects: Vec<String,
+    pub subjects: Vec<String>,
 }
 
 pub struct Province
@@ -195,6 +195,36 @@ pub fn from_savevalues(sv: &Vec<Box<SaveValue>>, pv: &mut Vec<Province>) -> Resu
                                                                                             prov.owner = Some(c.clone());
                                                                                         }
                                                                                     }
+                                                                                },
+                                                                                _ => continue,
+                                                                            }
+                                                                        }
+                                                                    },
+                                                                    _ => continue,
+                                                                }
+                                                            }
+                                                            else if *name == String::from("allies") {
+                                                                match val.as_ref() {
+                                                                    SaveValue::SaveArray(allies) => {
+                                                                        for ally in allies {
+                                                                            match ally.as_ref() {
+                                                                                SaveValue::SaveString(allytag) => {
+                                                                                    c.allies.push(allytag.clone());
+                                                                                },
+                                                                                _ => continue,
+                                                                            }
+                                                                        }
+                                                                    },
+                                                                    _ => continue,
+                                                                }
+                                                            }
+                                                            else if *name == String::from("subjects") {
+                                                                match val.as_ref() {
+                                                                    SaveValue::SaveArray(subs) => {
+                                                                        for sub in subs {
+                                                                            match sub.as_ref() {
+                                                                                SaveValue::SaveString(subtag) => {
+                                                                                    c.subjects.push(subtag.clone());
                                                                                 },
                                                                                 _ => continue,
                                                                             }

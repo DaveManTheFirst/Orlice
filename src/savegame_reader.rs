@@ -23,7 +23,9 @@ pub fn read_savegame(save_path: String, tag: String, provs_all: Vec<Province>) -
         color_b: 15,
         rank: 1, // Enum: Duchy, Kingom, Empire
         gov_type: String::from("Království"), // Empire, Kralvsti, Most Serene Republic, etc.
-        religion: String::from("Hussite")
+        religion: String::from("Hussite"),
+        allies: Vec::new(),
+        subjects: Vec::new(),
     };
 
     let mut f = File::open(save_path).unwrap();
