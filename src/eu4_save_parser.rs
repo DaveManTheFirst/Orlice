@@ -16,14 +16,9 @@ pub enum SaveValue {
     SaveObject(String, Box<SaveValue>),
 }
 
-pub fn parse_savegame(save_path: String) -> Result<Vec<Box<SaveValue>>, SaveGameParsingError> {
-
-    // open file and convert to utf8, because savegames are in Windows-1252 Format
-    let mut f = File::open(save_path)?;
-    let mut buffer = Vec::new();
-    f.read_to_end(&mut buffer)?;
-
-    let contents_string = String::from_utf8_lossy(&buffer);
+pub fn parse_savegame(save_buffer: &[u8]) -> Result<Vec<Box<SaveValue>>, SaveGameParsingError> {
+    // convert to utf8, because savegames are in Windows-1252 Format
+    let contents_string = String::from_utf8_lossy(&save_buffer);
 
     let file_header = "EU4txt\n";
 

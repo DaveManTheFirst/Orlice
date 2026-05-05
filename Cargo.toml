@@ -1,11 +1,26 @@
 [package]
-name = "Orlice"
+name = "orlice"
 version = "0.1.0"
+authors = ["DaveManTheFirst"]
+description = "WASM Port of the Orlice EU4 tool"
 edition = "2024"
+license = "MIT"
+repository = "https://github.com/DaveManTheFirst/Orlice"
+
+[lib]
+crate-type = ["cdylib"]
 
 [dependencies]
+console_error_panic_hook = "0.1.7"
 csv = "1.4.0"
 encoding_rs = "0.8.35"
 encoding_rs_io = "0.1.7"
+gloo-net = "0.7.0"
 image = "0.25.10"
 regex = "1.12.3"
+wasm-bindgen = "0.2.84"
+wasm-bindgen-futures = "0.4.70"
+
+#[profile.release]
+# Tell `rustc` to optimize for small code size.
+#opt-level = "s"

@@ -1,132 +1,36 @@
 use crate::game_types::Province;
 use crate::game_types::Nation;
-use crate::eu4_save_parser::SaveValue;
 
-use std::time::Instant;
 use std::error::Error;
+use std::io::Cursor;
 
-use image::{GenericImageView, ImageBuffer, Rgb, DynamicImage};
+use image::{GenericImageView, ImageBuffer, Rgb, DynamicImage, ImageFormat};
 
-pub mod game_types;
-pub mod savegame_reader;
-pub mod map_converter;
-pub mod eu4_save_parser;
 
-struct OutputOptions {
-    show_subjects: bool,
-    blend_subjects: bool,
-    show_allies: bool,
-    blend_allies: bool,
-    blend_factor: f32,
-    dest_path: String,
+pub struct ImageOptions {
+    pub show_subjects: bool,
+    pub blend_subjects: bool,
+    pub show_allies: bool,
+    pub blend_allies: bool,
+    pub blend_factor: f32,
+    pub dest_path: String,
 }
 
-fn main() {
-    let mut st = Instant::now();
-    let def_path = String::from("/mnt/MassenData/Programmieren/Rust/Orlice/resources/map/definition.csv");
-    let wb_path = String::from("/mnt/MassenData/Programmieren/Rust/Orlice/resources/map/water_bodies.csv");
-    let out_path = String::from("/mnt/MassenData/Programmieren/Rust/Orlice/resources/generation");
-    let bmp_path = String::from("/mnt/MassenData/Programmieren/Rust/Orlice/resources/map/provinces.bmp");
-    let save_path = String::from("/mnt/MassenData/Programmieren/Rust/Orlice/resources/savegame/gamestate");
-    let map_path = String::from("/mnt/MassenData/Programmieren/Rust/Orlice/resources/generation/coord_id_map.csv");
-    let dest_path = String::from("/mnt/MassenData/Programmieren/Rust/Orlice/misc/test.png");
+pub async fn make_image(all_provinces: &Vec<Province>, country_tags: Vec<String>, countries: &Vec<Nation>, opt: ImageOptions, map_path: String) -> Result<Vec<u8>, Box<dyn Error>> {
+    let resp = gloo_net::http::Request::get(&map_path).send().await?;
+    //let csv_str = String::from_utf8_lossy(&resp.text().await?);
+    let csv_str = resp.text().await?;
 
-    let sv = match crate::eu4_save_parser::parse_savegame(save_path) {
-            Ok(r) => r,
-            Err(error) => panic!("Problem parsing save game: {error:?}"),
-    };
-    println!("Parse Save: {}", st.elapsed().as_micros());
-    st = Instant::now();
-
-    let mut all_provinces = match crate::game_types::read_provinces(def_path.clone(), wb_path.clone()) {
-        Ok(pv) => pv,
-        Err(error) => panic!("Problem opening the definition or wb file: {error:?}"),
-    };
-    println!("Read Provinces: {}", st.elapsed().as_micros());
-    st = Instant::now();
-
-    let nations : Vec<Nation> = match crate::game_types::from_savevalues(&sv, &mut all_provinces) {
-        Ok(n) => n,
-        Err(error) => panic!("Problem getting game objects from save values: {error:?}"),
-    };
-    println!("Read & Assign Countries: {}", st.elapsed().as_micros());
-    st = Instant::now();
-
-    let mut country_tags = vec![String::from("EGY")]; /*, String::from("ITA"), String::from("EGY"), String::from("SCA"), String::from("GBR")]; */
-
-    println!("Assign Countries: {}", st.elapsed().as_micros());
-    st = Instant::now();
-
-    let opts = OutputOptions {
-        show_subjects: false,
-        blend_subjects: false,
-        show_allies: true,
-        blend_allies: true,
-        blend_factor: 0.25,
-        dest_path: dest_path.clone(),
-    };
-
-    //crate::map_converter::create_coord_to_id_csv(bmp_path.clone(), def_path.clone(), wb_path.clone(), out_path.clone());
-    let _ = make_image(&all_provinces, country_tags, &nations, opts, map_path.clone(), bmp_path.clone());
-    println!("Make Image: {}", st.elapsed().as_micros());
-}
-
-fn print_sv(sv: &SaveValue, tabs: u32) {
-    match sv {
-        SaveValue::SaveNull => { print_with_tab("Empty", tabs); }
-        SaveValue::SaveBool(b) => { print_with_tab(&format!("Bool: {b:?}!"), tabs); }
-        SaveValue::SaveNumber(i) => { print_with_tab(&format!("Number: {i:?}!"), tabs); }
-        SaveValue::SaveFloat(f) => { print_with_tab(&format!("Float: {f:?}!"), tabs); }
-        SaveValue::SaveDate(d) => { print_with_tab(&format!("Date: {d:?}!"), tabs); }
-        SaveValue::SaveString(s)  => { print_with_tab(&format!("String: {s:?}!"), tabs); }
-        SaveValue::SaveArray(v) => { print_with_tab(&format!("ARRAY!"), tabs); print_arr(&v, tabs + 1); }
-        SaveValue::SaveObject(s, b) => { print_with_tab_no_lb(&format!("Object: {s:?}=!"), tabs); print_sv(&b, tabs); }
-    }
-}
-
-fn print_arr(arr: &Vec<Box<SaveValue>>, tabs: u32) {
-    for s in arr.iter() {
-        print_sv(&s, 0);
-    }
-    println!("ARRAY ENDE!");
-}
-
-fn print_with_tab(s: &str, t: u32)
-{
-    let mut out = String::new();
-    let mut i = 0;
-    while i < t {
-        out.push_str("\t");
-        i += 1;
-    }
-    out.push_str(s);
-    println!("{}", out);
-}
-
-fn print_with_tab_no_lb(s: &str, t: u32)
-{
-    let mut out = String::new();
-    let mut i = 0;
-    while i < t {
-        out.push_str("\t");
-        i += 1;
-    }
-    out.push_str(s);
-    print!("{}", out);
-}
-
-fn make_image(all_provinces: &Vec<Province>, country_tags: Vec<String>, countries: &Vec<Nation>, opt: OutputOptions, map_path: String, bmp_path: String) -> Result<(), Box<dyn Error>> {
-    let pdx_bmp = image::open(bmp_path).unwrap();
-
-    let rdr = csv::ReaderBuilder::new()
+    let mut rdr = csv::ReaderBuilder::new()
     .delimiter(b',')
-    .from_path(map_path);
+    .from_reader(csv_str.as_bytes());
 
     let col_sea = image::Rgb([25, 100, 160]);
     let col_gray = image::Rgb([125, 125, 125]);
 
-    let img_x = pdx_bmp.width();
-    let img_y = pdx_bmp.height();
+    // embedd this in the csv also, but for now hardcode
+    let img_x = 5632;
+    let img_y = 2048;
     let mut imgbuf: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::new(img_x, img_y);
 
     // build a country_tags to include allies and show_subjects
@@ -157,14 +61,10 @@ fn make_image(all_provinces: &Vec<Province>, country_tags: Vec<String>, countrie
         }
     }
 
-
-    let st = Instant::now();
-    let mut cnt = 0;
-
     let mut prev_id : i32 = -1;
     let mut prev_x : u32 = 0;
     let mut prev_y : u32 = 0;
-    for result in rdr?.records() {
+    for result in rdr.records() {
         let r = result?;
         let x = r[0].parse::<u32>().unwrap();
         let y = r[1].parse::<u32>().unwrap();
@@ -280,7 +180,6 @@ fn make_image(all_provinces: &Vec<Province>, country_tags: Vec<String>, countrie
         for i in prev_x..x_adjusted{
             imgbuf.put_pixel(i, prev_y, px_col);
         }
-        cnt += 1;
 
 
         prev_id = id;
@@ -314,17 +213,14 @@ fn make_image(all_provinces: &Vec<Province>, country_tags: Vec<String>, countrie
         }
     }
 
-    println!("Overall: {}", st.elapsed().as_micros());
-    println!("Count: {}", cnt);
-    println!("Avg: {}", st.elapsed().as_micros() / cnt);
-
     let img_dyn: DynamicImage = DynamicImage::ImageRgb8(imgbuf);
     //img_dyn = img_dyn.resize(img_x * 2, img_y * 2, image::imageops::FilterType::Lanczos3);
     //let kernel: [f32; 9] = [1.0; 9];
     //img_dyn = img_dyn.filter3x3(&kernel);
-    img_dyn.save(opt.dest_path)?;
-
-    Ok(())
+    //img_dyn.save(opt.dest_path)?;
+    let mut buffer = Cursor::new(Vec::new());
+    img_dyn.write_to(&mut buffer, ImageFormat::Png);
+    Ok(buffer.into_inner())
 }
 
 fn blend_colors(original: u8, sub: u8, factor: f32) -> u8 {
@@ -343,4 +239,3 @@ fn blend_colors(original: u8, sub: u8, factor: f32) -> u8 {
     }
     ret as u8
 }
-
