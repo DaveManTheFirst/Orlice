@@ -33,7 +33,7 @@ pub fn get_nation_tags(save_string: &[u8]) -> Result<Vec<String>, JsValue> {
 }
 
 #[wasm_bindgen]
-pub async fn generate_image(save_string: &[u8]) -> Result<Vec<u8>, JsValue> {
+pub async fn generate_image(save_string: &[u8], country_tags: Vec<String>, image_options: Vec<u8>) -> Result<Vec<u8>, JsValue> {
     let def_path = String::from("/data/definition.csv");
     let wb_path = String::from("/data/water_bodies.csv");
     let map_path = String::from("/data/coord_id_map.csv");
@@ -53,13 +53,12 @@ pub async fn generate_image(save_string: &[u8]) -> Result<Vec<u8>, JsValue> {
         Err(error) => return Err(JsValue::from_str(&format!("Problem getting game objects from save values: {error:?}"))),
     };
 
-    let country_tags = vec![String::from("EGY")]; /*, String::from("ITA"), String::from("EGY"), String::from("SCA"), String::from("GBR")]; */
-
+    // we can recieve this in order
     let opts = ImageOptions {
-        show_subjects: false,
-        blend_subjects: false,
-        show_allies: true,
-        blend_allies: true,
+        show_subjects: image_options[2] > 0,
+        blend_subjects: image_options[3] > 0,
+        show_allies: image_options[0] > 0,
+        blend_allies: image_options[1] > 0,
         blend_factor: 0.25,
     };
 

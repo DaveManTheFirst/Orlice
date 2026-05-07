@@ -5,7 +5,6 @@ pub async fn read_provinces(def_path: String, wb_path: String) -> Result<Vec<Pro
     let mut pv = Vec::new();
 
     let resp = gloo_net::http::Request::get(&def_path).send().await?;
-    //let csv_str = String::from_utf8_lossy(&resp.text().await?);
     let csv_str = resp.text().await?;
 
     let mut rdr = csv::ReaderBuilder::new()
@@ -33,7 +32,6 @@ pub async fn read_provinces(def_path: String, wb_path: String) -> Result<Vec<Pro
 
     // read water bodies
     let resp_wb = gloo_net::http::Request::get(&wb_path).send().await?;
-    //let csv_str_wb = String::from_utf8_lossy(&resp_wb.text().await?);
     let csv_str_wb = resp_wb.text().await?;
 
     let mut rdr_water = csv::ReaderBuilder::new()
