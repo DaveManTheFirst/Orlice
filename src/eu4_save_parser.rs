@@ -1,6 +1,4 @@
-use std::io::prelude::*;
 use std::io;
-use std::fs::File;
 use std::num::ParseIntError;
 use std::num::ParseFloatError;
 use std::fmt;

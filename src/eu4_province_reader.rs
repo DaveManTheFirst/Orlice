@@ -1,7 +1,5 @@
-use std::{error::Error, fs::File};
-
+use std::error::Error;
 use crate::game_types::Province;
-use crate::game_types::Nation;
 
 pub async fn read_provinces(def_path: String, wb_path: String) -> Result<Vec<Province>, Box<dyn Error>> {
     let mut pv = Vec::new();

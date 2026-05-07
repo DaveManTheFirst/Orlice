@@ -43,6 +43,35 @@ impl Nation {
     }
 }
 
+pub fn get_tags_from_savevalues(sv: &Vec<Box<SaveValue>>) -> Result<Vec<String>, Box<dyn Error>> {
+    let mut tags : Vec<String> = Vec::new();
+
+    for sa in sv {
+        match sa.as_ref() {
+            SaveValue::SaveObject(v, u) => {
+                if *v == String::from("countries") {
+                    match u.as_ref() {
+                        SaveValue::SaveArray(a) => {
+                            for ca in a {
+                                match ca.as_ref() {
+                                    SaveValue::SaveObject(tag, _) => {
+                                        tags.push(tag.clone());
+                                    },
+                                    _ => continue,
+                                }
+                            }
+                        },
+                        _ => continue,
+                    }
+                    break;
+                }
+            },
+            _ => continue,
+        }
+    }
+    Ok(tags)
+}
+
 pub fn from_savevalues(sv: &Vec<Box<SaveValue>>, pv: &mut Vec<Province>) -> Result<Vec<Nation>, Box<dyn Error>> {
 
     let mut countries : Vec<Nation> = Vec::new();

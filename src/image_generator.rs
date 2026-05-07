@@ -4,7 +4,7 @@ use crate::game_types::Nation;
 use std::error::Error;
 use std::io::Cursor;
 
-use image::{GenericImageView, ImageBuffer, Rgb, DynamicImage, ImageFormat};
+use image::{ImageBuffer, Rgb, DynamicImage, ImageFormat};
 
 
 pub struct ImageOptions {
@@ -13,7 +13,6 @@ pub struct ImageOptions {
     pub show_allies: bool,
     pub blend_allies: bool,
     pub blend_factor: f32,
-    pub dest_path: String,
 }
 
 pub async fn make_image(all_provinces: &Vec<Province>, country_tags: Vec<String>, countries: &Vec<Nation>, opt: ImageOptions, map_path: String) -> Result<Vec<u8>, Box<dyn Error>> {
@@ -219,7 +218,7 @@ pub async fn make_image(all_provinces: &Vec<Province>, country_tags: Vec<String>
     //img_dyn = img_dyn.filter3x3(&kernel);
     //img_dyn.save(opt.dest_path)?;
     let mut buffer = Cursor::new(Vec::new());
-    img_dyn.write_to(&mut buffer, ImageFormat::Png);
+    let _ = img_dyn.write_to(&mut buffer, ImageFormat::Png);
     Ok(buffer.into_inner())
 }
 
