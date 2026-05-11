@@ -4,8 +4,8 @@ use image::{GenericImageView, Pixel};
 /*
  I could add something like: copy def.csv, wb.csv and out.csv in out_dir
  */
-pub fn create_coord_to_id_csv(bmp_path: String, def_path: String, wb_path: String, out_dir: String) -> Result<(), Box<dyn Error>> {
-    let all_provinces = crate::game_types::read_provinces(def_path.clone(), wb_path.clone())?;
+pub async fn create_coord_to_id_csv(bmp_path: String, def_path: String, wb_path: String, out_dir: String) -> Result<(), Box<dyn Error>> {
+    let all_provinces = crate::eu4_province_reader::read_provinces(def_path.clone(), wb_path.clone()).await?;
 
     let pdx_bmp = image::open(bmp_path)?;
     let mut wtr = csv::Writer::from_path(out_dir.to_string() + "/coord_id_map.csv")?;

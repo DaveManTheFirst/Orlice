@@ -1,0 +1,6 @@
+services:
+  website:
+    container_name: orlice-wasm
+    build: "../"
+    ports:
+      - "8080:8080"
