@@ -2,6 +2,7 @@ extern crate wasm_bindgen;
 
 use crate::game_types::Nation;
 use crate::image_generator::ImageOptions;
+use crate::image_generator::ContinentCoord;
 
 use wasm_bindgen::prelude::*;
 
@@ -17,6 +18,7 @@ pub fn init() {
     console_error_panic_hook::set_once();
 }
 
+// TODO: Return Only those nations that have land
 #[wasm_bindgen]
 pub fn get_nation_tags(save_string: &[u8]) -> Result<Vec<String>, JsValue> {
     let sv = match crate::eu4_save_parser::parse_savegame(save_string) {
@@ -53,6 +55,19 @@ pub async fn generate_image(save_string: &[u8], country_tags: Vec<String>, image
         Err(error) => return Err(JsValue::from_str(&format!("Problem getting game objects from save values: {error:?}"))),
     };
 
+    let continent: ContinentCoord = match image_options[6] {
+        0 => ContinentCoord::ALL,
+        1 => ContinentCoord::NORTH_AMERICA,
+        2 => ContinentCoord::SOUTH_AMERICA,
+        3 => ContinentCoord::EUROPE,
+        4 => ContinentCoord::AFRICA,
+        5 => ContinentCoord::ASIA,
+        6 => ContinentCoord::SE_ASIA_OCEANIA,
+        7 => ContinentCoord::INDIA_PERSIA,
+        8 => ContinentCoord::SE_ASIA,
+        _ => ContinentCoord::ALL,
+    };
+
     // we can recieve this in order
     let opts = ImageOptions {
         show_subjects: image_options[2] > 0,
@@ -60,6 +75,9 @@ pub async fn generate_image(save_string: &[u8], country_tags: Vec<String>, image
         show_allies: image_options[0] > 0,
         blend_allies: image_options[1] > 0,
         blend_factor: 0.25,
+        sub_overlord_col: image_options[4] > 0,
+        show_all: image_options[5] > 0,
+        continent: continent,
     };
 
     //crate::map_converter::create_coord_to_id_csv(bmp_path.clone(), def_path.clone(), wb_path.clone(), out_path.clone());

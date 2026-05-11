@@ -76,6 +76,7 @@
     <label><input type="checkbox" id="showSubjects"> Show Subjects</label>
     <label><input type="checkbox" id="blendSubjects" disabled=true> Blend Subjects</label>
     <label><input type="checkbox" id="subjectCol" disabled=true> Subjects in Overlord Color</label>
+    <label><input type="checkbox" id="showAll"> Show all</label>
   </div>
 
   <!-- Dynamic Inputs -->
@@ -83,6 +84,22 @@
     <label><strong>Nations:</strong></label>
     <div id="inputsContainer"></div>
     <button id="btnAddNation" disabled=true>+ Add Nations</button>
+  </div>
+
+  <!-- Select Continent -->
+  <div class="section">
+    <label><strong>Show Continent:</strong></label>
+    <select id="selectContinent" >
+      <option value="0">All</option>
+      <option value="1">North America</option>
+      <option value="2">South America</option>
+      <option value="3">Europe</option>
+      <option value="4">Africa</option>
+      <option value="5">Asia</option>
+      <option value="6">SE Asia with Oceania</option>
+      <option value="7">India and Persia</option>
+      <option value="8">East Asia</option>
+    </select>
   </div>
 
   <!-- Submit -->

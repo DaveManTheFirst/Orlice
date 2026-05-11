@@ -7,12 +7,30 @@ const blendAllies = document.getElementById("blendAllies");
 const showSubjects = document.getElementById("showSubjects");
 const blendSubjects = document.getElementById("blendSubjects");
 const subjectCol = document.getElementById("subjectCol");
+const showAll = document.getElementById("showAll");
+const selectContinent = document.getElementById("selectContinent");
 var optionsArray = ["BOH", "SWE"];
 
 async function run() {
     await init();
     //wasm.greet();
 }
+
+showAll.addEventListener('click', () => {
+    blendAllies.disabled = showAll.checked;
+    showAllies.disabled = showAll.checked;
+    showSubjects.disabled = showAll.checked;
+
+    if (showAll.checked) {
+        blendAllies.checked = false;
+        showAllies.checked = false;
+        showSubjects.checked = false;
+
+        blendSubjects.disabled = false;
+        subjectCol.disabled = false;
+    }
+
+});
 
 showAllies.addEventListener('click', () => {
     blendAllies.disabled = !showAllies.checked;
@@ -82,7 +100,7 @@ btnSubmitForm.addEventListener('click', async () => {
     const buffer = await file.arrayBuffer();
     const bytes = new Uint8Array(buffer);
 
-    const imageOptions = [showAllies.checked, blendAllies.checked, showSubjects.checked, blendAllies.checked, subjectCol.checked];
+    const imageOptions = [showAllies.checked, blendAllies.checked, showSubjects.checked, blendAllies.checked, subjectCol.checked, showAll.checked, selectContinent.value];
     console.log(imageOptions);
 
     const countryTags = Array.from(document.querySelectorAll("#inputsContainer select"))

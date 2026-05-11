@@ -7,13 +7,41 @@ use std::io::Cursor;
 use image::{ImageBuffer, Rgb, DynamicImage, ImageFormat};
 
 
+#[derive(Clone)]
 pub struct ImageOptions {
     pub show_subjects: bool,
     pub blend_subjects: bool,
     pub show_allies: bool,
     pub blend_allies: bool,
     pub blend_factor: f32,
+    pub sub_overlord_col: bool,
+    pub show_all: bool,
+    pub continent: ContinentCoord,
 }
+
+#[derive(Clone)]
+pub struct ContinentCoord(([u32; 2], [u32; 2]));
+
+impl ContinentCoord {
+    pub const ALL: ContinentCoord = ContinentCoord(([0, 0], [5632, 2048]));
+    pub const NORTH_AMERICA: ContinentCoord = ContinentCoord(([0, 0],[2200, 1130]));
+    pub const SOUTH_AMERICA: ContinentCoord = ContinentCoord(([1170, 930],[2500, 2048]));
+    pub const EUROPE: ContinentCoord = ContinentCoord(([2330, 0],[3600, 950]));
+    pub const AFRICA: ContinentCoord = ContinentCoord(([2280, 700],[3850, 2048]));
+    pub const ASIA: ContinentCoord = ContinentCoord(([3280, 290],[5632, 1600]));
+    pub const SE_ASIA_OCEANIA: ContinentCoord = ContinentCoord(([4200, 1080],[5632, 2048]));
+    pub const INDIA_PERSIA: ContinentCoord = ContinentCoord(([3440, 780],[4370, 1385]));
+    pub const SE_ASIA: ContinentCoord = ContinentCoord(([4100, 380],[5300, 1460]));
+}
+
+impl PartialEq for ContinentCoord {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl Eq for ContinentCoord {}
+
 
 pub async fn make_image(all_provinces: &Vec<Province>, country_tags: Vec<String>, countries: &Vec<Nation>, opt: ImageOptions, map_path: String) -> Result<Vec<u8>, Box<dyn Error>> {
     let resp = gloo_net::http::Request::get(&map_path).send().await?;
@@ -91,77 +119,7 @@ pub async fn make_image(all_provinces: &Vec<Province>, country_tags: Vec<String>
                     None => false,
                 };
                 if is_country {
-                    let owner = p.owner.as_ref().unwrap();
-                    if country_tags_all.contains(&owner.tag) {
-                        if country_tags.contains(&owner.tag) {
-                            px_col = image::Rgb([owner.color_r, owner.color_g, owner.color_b]);
-                        }
-                        else {
-                            let mut col_owner_r = 0;
-                            let mut col_owner_g = 0;
-                            let mut col_owner_b = 0;
-                            let mut col_other_r = 0;
-                            let mut col_other_g = 0;
-                            let mut col_other_b = 0;
-                            let mut is_ally = false;
-                            let mut is_subject = false;
-                            // gotta be ally or subject
-                            for n in countries {
-                                if n.tag == owner.tag {
-                                    col_other_r = owner.color_r;
-                                    col_other_g = owner.color_g;
-                                    col_other_b = owner.color_b;
-                                }
-                                if !country_tags.contains(&n.tag) {
-                                    continue;
-                                }
-                                if opt.show_allies && !is_ally {
-                                    for ally in &n.allies {
-                                        if ally == &owner.tag {
-                                            is_ally = true;
-                                            col_owner_r = n.color_r;
-                                            col_owner_g = n.color_g;
-                                            col_owner_b = n.color_b;
-                                            break;
-                                        }
-                                    }
-                                }
-                                if opt.show_subjects && !is_subject {
-                                    for sub in &n.subjects {
-                                        if sub == &owner.tag {
-                                            is_subject = true;
-                                            col_owner_r = n.color_r;
-                                            col_owner_g = n.color_g;
-                                            col_owner_b = n.color_b;
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                            if is_ally {
-                                if opt.blend_allies {
-                                    let red = blend_colors(col_owner_r, col_other_r, opt.blend_factor);
-                                    let green = blend_colors(col_owner_g, col_other_g, opt.blend_factor);
-                                    let blue = blend_colors(col_owner_b, col_other_b, opt.blend_factor);
-                                    px_col = image::Rgb([red, green, blue]);
-                                }
-                                else {
-                                    px_col = image::Rgb([col_other_r, col_other_g, col_other_b]);
-                                }
-                            }
-                            if is_subject {
-                                if opt.blend_subjects {
-                                    let red = blend_colors(col_owner_r, col_other_r, opt.blend_factor);
-                                    let green = blend_colors(col_owner_g, col_other_g, opt.blend_factor);
-                                    let blue = blend_colors(col_owner_b, col_other_b, opt.blend_factor);
-                                    px_col = image::Rgb([red, green, blue]);
-                                }
-                                else {
-                                    px_col = image::Rgb([col_other_r, col_other_g, col_other_b]);
-                                }
-                            }
-                        }
-                    }
+                    px_col = get_province_color_for_country(p, &country_tags, &country_tags_all, countries, opt.clone())?;
                 }
                 else if p.is_used == false {
                     // idk what provinces are unused or not x
@@ -212,7 +170,13 @@ pub async fn make_image(all_provinces: &Vec<Province>, country_tags: Vec<String>
         }
     }
 
-    let img_dyn: DynamicImage = DynamicImage::ImageRgb8(imgbuf);
+    let mut img_dyn: DynamicImage = DynamicImage::ImageRgb8(imgbuf);
+
+    if opt.continent != ContinentCoord::ALL {
+        let l = opt.continent.0.1[0] - opt.continent.0.0[0];
+        let h = opt.continent.0.1[1] - opt.continent.0.0[1];
+        img_dyn = img_dyn.crop_imm(opt.continent.0.0[0], opt.continent.0.0[1], l , h);
+    }
     //img_dyn = img_dyn.resize(img_x * 2, img_y * 2, image::imageops::FilterType::Lanczos3);
     //let kernel: [f32; 9] = [1.0; 9];
     //img_dyn = img_dyn.filter3x3(&kernel);
@@ -220,6 +184,102 @@ pub async fn make_image(all_provinces: &Vec<Province>, country_tags: Vec<String>
     let mut buffer = Cursor::new(Vec::new());
     let _ = img_dyn.write_to(&mut buffer, ImageFormat::Png);
     Ok(buffer.into_inner())
+}
+
+// TODO: i should add a color attribute to province, so that i only have to call this function once / it only does this search once per province
+fn get_province_color_for_country(p: &Province, country_tags_all: &Vec<String>, country_tags: &Vec<String>, countries: &Vec<Nation>, opt: ImageOptions) -> Result<image::Rgb<u8>, Box<dyn Error>> {
+    let mut px_col = image::Rgb([125, 125, 125]);
+    let owner = p.owner.as_ref().unwrap();
+
+    // TODO: the logic for show all is flawed
+    if opt.show_all && !opt.sub_overlord_col {
+        return Ok(image::Rgb([owner.color_r, owner.color_g, owner.color_b]));
+    }
+
+    if !country_tags_all.contains(&owner.tag) && !opt.show_all {
+        return Ok(px_col);
+    }
+
+    if country_tags.contains(&owner.tag) {
+        return Ok(image::Rgb([owner.color_r, owner.color_g, owner.color_b]));
+    }
+
+    // either a subject or a ally or not to be shown
+    let mut lord_r = 0;
+    let mut lord_g = 0;
+    let mut lord_b = 0;
+    let mut sub_r = 0;
+    let mut sub_g = 0;
+    let mut sub_b = 0;
+    let mut is_ally = false;
+    let mut is_subject = false;
+
+    for n in countries {
+        if n.tag == owner.tag {
+            sub_r = owner.color_r;
+            sub_g = owner.color_g;
+            sub_b = owner.color_b;
+        }
+        if !country_tags.contains(&n.tag) && !opt.show_all {
+            continue;
+        }
+        if opt.show_allies && !is_ally {
+            for ally in &n.allies {
+                if ally == &owner.tag {
+                    is_ally = true;
+                    lord_r = n.color_r;
+                    lord_g = n.color_g;
+                    lord_b = n.color_b;
+                    break;
+                }
+            }
+        }
+        if opt.show_subjects && !is_subject {
+            for sub in &n.subjects {
+                if sub == &owner.tag {
+
+                    if opt.sub_overlord_col {
+                        return Ok(image::Rgb([n.color_r, n.color_g, n.color_b]));
+                    }
+
+                    is_subject = true;
+                    lord_r = n.color_r;
+                    lord_g = n.color_g;
+                    lord_b = n.color_b;
+                    break;
+                }
+            }
+        }
+    }
+
+    if opt.show_all && !is_subject {
+        return Ok(image::Rgb([sub_r, sub_g, sub_b]));
+    }
+
+    if is_ally {
+        if opt.blend_allies {
+            let red = blend_colors(lord_r, sub_r, opt.blend_factor);
+            let green = blend_colors(lord_g, sub_g, opt.blend_factor);
+            let blue = blend_colors(lord_b, sub_b, opt.blend_factor);
+            px_col = image::Rgb([red, green, blue]);
+        }
+        else {
+            px_col = image::Rgb([sub_r, sub_g, sub_b]);
+        }
+    }
+    if is_subject {
+        if opt.blend_subjects {
+            let red = blend_colors(lord_r, sub_r, opt.blend_factor);
+            let green = blend_colors(lord_g, sub_g, opt.blend_factor);
+            let blue = blend_colors(lord_b, sub_b, opt.blend_factor);
+            px_col = image::Rgb([red, green, blue]);
+        }
+        else {
+            px_col = image::Rgb([sub_r, sub_g, sub_b]);
+        }
+    }
+
+    Ok(px_col)
 }
 
 fn blend_colors(original: u8, sub: u8, factor: f32) -> u8 {
